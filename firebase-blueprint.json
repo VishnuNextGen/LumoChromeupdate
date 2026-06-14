@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about a user.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "number", "description": "Server timestamp when user was created." }
+      },
+      "required": ["email"]
+    },
+    "Project": {
+      "title": "Video Analysis Project",
+      "description": "A project containing video annotations, events, and tags.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "ownerId": { "type": "string", "description": "UID of the project owner." },
+        "fileName": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "data": { "type": "string", "description": "JSON string stringified project data containing shapes, freezeFrames, playlists, tags, tagEvents, etc. Or it could be broken down." }
+      },
+      "required": ["name", "ownerId", "createdAt", "updatedAt", "data"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Users collection."
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Projects collection, containing the full state of the project as a stringified JSON in 'data' field to fit within document limits, since shapes and paths can be complex."
+    }
+  }
+}

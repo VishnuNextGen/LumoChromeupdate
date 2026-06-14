@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && (request.auth.token.email_verified == true || request.auth.token.get('email_verified', false) == true);
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User Profile Validation
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'createdAt'])
+        && data.keys().size() <= 10
+        && data.email is string && data.email.size() <= 200
+        && (data.createdAt == request.time || data.createdAt is timestamp)
+        && data.get('name', 'Anonymous User') is string;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() 
+        && isValidId(userId) 
+        && request.auth.uid == userId
+        && isValidUser(incoming());
+      allow update: if isSignedIn() 
+        && request.auth.uid == userId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email'])
+        && incoming().email is string && incoming().email.size() <= 200
+        && incoming().get('name', '') is string;
+      allow delete: if false; 
+    }
+
+    // Project Validation
+    function isValidProjectCreate(data) {
+      return data.keys().hasAll(['name', 'ownerId', 'createdAt', 'updatedAt', 'data'])
+        && data.keys().size() <= 10
+        && data.name is string && data.name.size() <= 200
+        && data.ownerId == request.auth.uid
+        && (data.createdAt == request.time || data.createdAt is timestamp)
+        && (data.updatedAt == request.time || data.updatedAt is timestamp)
+        && data.data is string && data.data.size() <= 1000000
+        && data.get('description', '') is string
+        && data.get('fileName', '') is string;
+    }
+
+    match /projects/{projectId} {
+      allow get: if isSignedIn() && existing().ownerId == request.auth.uid && isValidId(projectId);
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      
+      allow create: if isSignedIn() 
+        && isValidId(projectId)
+        && isValidProjectCreate(incoming())
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+        
+      allow update: if isSignedIn() 
+        && isValidId(projectId)
+        && existing().ownerId == request.auth.uid
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && (incoming().updatedAt == request.time || incoming().updatedAt is timestamp)
+        && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'data', 'updatedAt'])
+        )
+        && incoming().name is string && incoming().name.size() <= 200
+        && incoming().data is string && incoming().data.size() <= 1000000
+        && incoming().get('description', '') is string;
+        
+      allow delete: if isSignedIn() && existing().ownerId == request.auth.uid && isValidId(projectId);
+    }
+  }
+}

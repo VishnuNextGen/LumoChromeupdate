@@ -1,0 +1,8 @@
+{
+  "description": "A collaborative presentation analysis platform featuring video annotation tracking and Firebase persistent database storage.",
+  "requestFramePermissions": [
+    "display-capture"
+  ],
+  "name": "Remix: Lumo Pitch 1.0",
+  "majorCapabilities": []
+}
