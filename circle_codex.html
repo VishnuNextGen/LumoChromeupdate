@@ -1,0 +1,411 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Telestration Ring - Broadcast 3D</title>
+<style>
+  :root{
+    --bg: #0b6623;
+    --panel: rgba(8, 14, 18, 0.68);
+    --panel-edge: rgba(255,255,255,0.18);
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{
+    height:100%;
+    margin:0;
+    background:
+      radial-gradient(circle at 50% 36%, rgba(255,255,255,0.08), transparent 30%),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px) 0 0 / 92px 92px,
+      linear-gradient(0deg, rgba(255,255,255,0.03) 1px, transparent 1px) 0 0 / 92px 92px,
+      var(--bg);
+    font-family: Arial, Helvetica, sans-serif;
+    overflow:hidden;
+    cursor: crosshair;
+  }
+
+  .controller{
+    position:fixed;
+    left:50%;
+    bottom:18px;
+    transform:translateX(-50%);
+    display:flex;
+    gap:16px;
+    align-items:center;
+    min-height:54px;
+    padding:10px 14px;
+    color:#f7fbff;
+    background:linear-gradient(180deg, rgba(28,38,45,0.78), var(--panel));
+    border:1px solid var(--panel-edge);
+    border-radius:8px;
+    box-shadow:0 16px 34px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.12);
+    backdrop-filter: blur(12px);
+    user-select:none;
+    z-index:1000;
+    cursor: default;
+  }
+
+  .control-group{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    font-weight:700;
+    letter-spacing:0;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+
+  .controller input[type="range"]{
+    width:150px;
+    accent-color:#66f0ff;
+  }
+
+  .controller input[type="color"]{
+    width:34px;
+    height:34px;
+    border:1px solid rgba(255,255,255,0.34);
+    border-radius:6px;
+    padding:2px;
+    background:rgba(255,255,255,0.12);
+    cursor:pointer;
+  }
+
+  #tiltValue{
+    min-width:34px;
+    text-align:right;
+    color:#c9f8ff;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .ring{
+    position:absolute;
+    width:132px;
+    height:132px;
+    transform-style:preserve-3d;
+    pointer-events:auto;
+    cursor:grab;
+    --ring-color:#00eaff;
+    --ring-deep:#0089a2;
+    --ring-dark:#004f62;
+    --ring-light:#a8fbff;
+    --ring-hot:#ffffff;
+    --tilt-deg:22deg;
+    --spin-speed:2.35s;
+  }
+
+  .ring:active{ cursor:grabbing; }
+
+  .ring .contact-shadow{
+    position:absolute;
+    left:10px;
+    right:10px;
+    bottom:4px;
+    height:30px;
+    border-radius:50%;
+    background:radial-gradient(ellipse at center, rgba(0,0,0,0.54), rgba(0,0,0,0.22) 44%, transparent 72%);
+    filter:blur(4px);
+    transform:translateZ(-28px) rotateX(72deg);
+    pointer-events:none;
+  }
+
+  .ring .body-layer{
+    position:absolute;
+    inset:1px;
+    border-radius:50%;
+    pointer-events:none;
+    background:
+      radial-gradient(circle at 35% 18%, rgba(255,255,255,0.24), transparent 23%),
+      conic-gradient(from -28deg,
+        color-mix(in srgb, var(--ring-light), transparent 30%) 0deg,
+        var(--ring-color) 34deg,
+        var(--ring-deep) 106deg,
+        var(--ring-dark) 188deg,
+        color-mix(in srgb, var(--ring-dark), black 22%) 246deg,
+        var(--ring-deep) 318deg,
+        color-mix(in srgb, var(--ring-light), transparent 40%) 360deg);
+    -webkit-mask:
+      radial-gradient(farthest-side, transparent 0 43%, #000 44% 100%);
+    mask:
+      radial-gradient(farthest-side, transparent 0 43%, #000 44% 100%);
+    box-shadow:
+      inset 0 5px 7px rgba(255,255,255,0.16),
+      inset 0 -9px 15px rgba(0,0,0,0.5),
+      0 2px 3px rgba(0,0,0,0.2);
+    filter:saturate(1.08);
+  }
+
+  .ring .body-layer-1{
+    transform:translate3d(2px, 4px, -4px) scale(0.998);
+    opacity:0.88;
+  }
+
+  .ring .body-layer-2{
+    transform:translate3d(4px, 8px, -8px) scale(0.994);
+    opacity:0.7;
+    filter:saturate(1) brightness(0.88);
+  }
+
+  .ring .body-layer-3{
+    transform:translate3d(6px, 12px, -12px) scale(0.99);
+    opacity:0.52;
+    filter:saturate(0.95) brightness(0.72);
+  }
+
+  .ring .fill{
+    position:absolute;
+    inset:0;
+    border-radius:50%;
+    overflow:hidden;
+    background:
+      radial-gradient(circle at 34% 22%, rgba(255,255,255,0.92) 0 6%, rgba(255,255,255,0.22) 17%, transparent 31%),
+      conic-gradient(from -22deg,
+        var(--ring-hot) 0deg,
+        var(--ring-light) 22deg,
+        var(--ring-color) 72deg,
+        var(--ring-deep) 128deg,
+        var(--ring-dark) 184deg,
+        var(--ring-color) 248deg,
+        var(--ring-light) 304deg,
+        var(--ring-hot) 360deg);
+    animation:broadcastSpin var(--spin-speed) linear infinite;
+    box-shadow:
+      inset 0 8px 12px rgba(255,255,255,0.34),
+      inset 0 -13px 18px rgba(0,0,0,0.38),
+      0 10px 22px rgba(0,0,0,0.26),
+      0 0 22px color-mix(in srgb, var(--ring-color), transparent 42%);
+    filter:saturate(1.2) contrast(1.08);
+  }
+
+  .ring .fill::before{
+    content:"";
+    position:absolute;
+    inset:7px;
+    border-radius:50%;
+    border:8px solid rgba(255,255,255,0.24);
+    border-bottom-color:rgba(0,0,0,0.28);
+    border-right-color:rgba(0,0,0,0.2);
+    mix-blend-mode:screen;
+    opacity:0.82;
+  }
+
+  .ring .fill::after{
+    content:"";
+    position:absolute;
+    inset:-8px;
+    border-radius:50%;
+    background:conic-gradient(from 18deg, transparent 0 34deg, rgba(255,255,255,0.76) 48deg, transparent 74deg, transparent 180deg, rgba(255,255,255,0.28) 216deg, transparent 250deg, transparent 360deg);
+    filter:blur(1px);
+    opacity:0.82;
+  }
+
+  .ring .hole{
+    position:absolute;
+    inset:29px;
+    border-radius:50%;
+    background:var(--bg);
+    box-shadow:
+      inset 0 9px 16px rgba(0,0,0,0.48),
+      inset 0 -4px 10px rgba(255,255,255,0.08),
+      0 0 0 2px rgba(255,255,255,0.22),
+      0 0 0 7px rgba(0,0,0,0.12);
+    pointer-events:none;
+  }
+
+  .ring .glass{
+    position:absolute;
+    inset:2px;
+    border-radius:50%;
+    background:linear-gradient(145deg, rgba(255,255,255,0.45), transparent 28%, transparent 62%, rgba(0,0,0,0.24));
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.32);
+    mix-blend-mode:soft-light;
+    pointer-events:none;
+  }
+
+  .ring .specular-streak{
+    position:absolute;
+    inset:-5px;
+    border-radius:50%;
+    pointer-events:none;
+    animation:specularOrbit 1.18s cubic-bezier(0.42, 0, 0.18, 1) infinite;
+    mix-blend-mode:screen;
+    filter:drop-shadow(0 0 8px rgba(255,255,255,0.72));
+  }
+
+  .ring .specular-streak::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    border-radius:50%;
+    background:
+      conic-gradient(from -14deg,
+        transparent 0deg 18deg,
+        rgba(255,255,255,0.05) 24deg,
+        rgba(255,255,255,0.92) 32deg,
+        rgba(255,255,255,0.72) 40deg,
+        transparent 55deg 360deg);
+    -webkit-mask:
+      radial-gradient(farthest-side, transparent calc(100% - 31px), #000 calc(100% - 30px) calc(100% - 10px), transparent calc(100% - 8px));
+    mask:
+      radial-gradient(farthest-side, transparent calc(100% - 31px), #000 calc(100% - 30px) calc(100% - 10px), transparent calc(100% - 8px));
+  }
+
+  .ring .specular-streak::after{
+    content:"";
+    position:absolute;
+    top:12px;
+    left:50%;
+    width:24px;
+    height:9px;
+    border-radius:50%;
+    background:radial-gradient(ellipse at center, rgba(255,255,255,0.98), rgba(255,255,255,0.4) 52%, transparent 72%);
+    transform:translateX(-50%) rotate(-10deg);
+    filter:blur(0.4px);
+  }
+
+  .ring .stroke{
+    position:absolute;
+    inset:0;
+    border-radius:50%;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.36) inset,
+      0 0 0 3px rgba(0,0,0,0.12) inset,
+      0 0 18px color-mix(in srgb, var(--ring-color), transparent 34%),
+      0 0 3px rgba(255,255,255,0.7);
+    pointer-events:none;
+  }
+
+  @keyframes broadcastSpin{
+    to{ transform:rotate(360deg); }
+  }
+
+  @keyframes specularOrbit{
+    0%{ transform:rotate(0deg); opacity:0; }
+    7%{ opacity:1; }
+    58%{ opacity:0.9; }
+    72%{ opacity:0; }
+    100%{ transform:rotate(360deg); opacity:0; }
+  }
+
+  @keyframes ringEntrance{
+    0%{
+      transform:rotateX(var(--tilt-deg)) scale(0.52);
+      opacity:0;
+      filter:blur(3px);
+    }
+    58%{ transform:rotateX(var(--tilt-deg)) scale(1.08); }
+    100%{
+      transform:rotateX(var(--tilt-deg)) scale(1);
+      opacity:1;
+      filter:blur(0);
+    }
+  }
+
+  @media (max-width:620px){
+    .controller{
+      width:calc(100vw - 24px);
+      justify-content:center;
+      flex-wrap:wrap;
+      gap:10px 14px;
+    }
+    .controller input[type="range"]{ width:128px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controller" aria-label="Ring controls">
+  <label class="control-group" for="tiltSlider">
+    Tilt
+    <input id="tiltSlider" type="range" min="0" max="60" value="22">
+    <span id="tiltValue">22°</span>
+  </label>
+  <label class="control-group" for="colorPicker">
+    Ring Color
+    <input id="colorPicker" type="color" value="#00eaff">
+  </label>
+</div>
+
+<script>
+let tiltDeg = 22;
+let baseColor = '#00eaff';
+
+const ringSize = 132;
+const tiltSlider = document.getElementById('tiltSlider');
+const tiltValue = document.getElementById('tiltValue');
+const colorPicker = document.getElementById('colorPicker');
+
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function hexToRgb(hex){
+  hex = hex.replace('#','');
+  if(hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
+  const n = parseInt(hex,16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+}
+function rgbToHex(r,g,b){
+  return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+function shiftColor(hex, amt){
+  const [r,g,b] = hexToRgb(hex);
+  const f = (c) => clamp(Math.round(c + (amt/100)*255), 0, 255);
+  return rgbToHex(f(r), f(g), f(b));
+}
+
+function paintRing(ring, color){
+  ring.style.setProperty('--ring-color', color);
+  ring.style.setProperty('--ring-deep', shiftColor(color, -24));
+  ring.style.setProperty('--ring-dark', shiftColor(color, -48));
+  ring.style.setProperty('--ring-light', shiftColor(color, 30));
+  ring.style.setProperty('--ring-hot', shiftColor(color, 58));
+}
+
+function setRingTilt(ring){
+  ring.style.setProperty('--tilt-deg', `${tiltDeg}deg`);
+  ring.style.transform = `rotateX(${tiltDeg}deg)`;
+}
+
+function createLayer(className){
+  const layer = document.createElement('div');
+  layer.className = className;
+  return layer;
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.controller')) return;
+
+  const ring = document.createElement('div');
+  ring.className = 'ring';
+  ring.style.left = (e.clientX - ringSize / 2) + 'px';
+  ring.style.top = (e.clientY - ringSize / 2) + 'px';
+  ring.style.animation = 'ringEntrance 420ms cubic-bezier(0.2, 0.9, 0.25, 1.25) both';
+  ring.style.setProperty('--spin-speed', `${(2.1 + Math.random() * 0.7).toFixed(2)}s`);
+
+  paintRing(ring, baseColor);
+  setRingTilt(ring);
+
+  ring.appendChild(createLayer('contact-shadow'));
+  ring.appendChild(createLayer('body-layer body-layer-3'));
+  ring.appendChild(createLayer('body-layer body-layer-2'));
+  ring.appendChild(createLayer('body-layer body-layer-1'));
+  ring.appendChild(createLayer('fill'));
+  ring.appendChild(createLayer('hole'));
+  ring.appendChild(createLayer('glass'));
+  ring.appendChild(createLayer('specular-streak'));
+  ring.appendChild(createLayer('stroke'));
+
+  document.body.appendChild(ring);
+});
+
+tiltSlider.addEventListener('input', () => {
+  tiltDeg = Number(tiltSlider.value);
+  tiltValue.textContent = tiltDeg + '°';
+  document.querySelectorAll('.ring').forEach(setRingTilt);
+});
+
+colorPicker.addEventListener('input', () => {
+  baseColor = colorPicker.value;
+});
+</script>
+</body>
+</html>
