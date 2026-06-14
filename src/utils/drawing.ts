@@ -357,13 +357,13 @@ export const draw3DRing = (ctx: CanvasRenderingContext2D, x: number, y: number, 
   if (radius < 1) return;
   const now = Date.now();
   const timeElapsed = isGhost ? now : (now - timestamp);
-  
+
+  // Entrance animation
   let scaleEnt = 1;
   let alphaEnt = 1;
   const entSpeed = 420;
   if (!isGhost && timeElapsed < entSpeed) {
       const p = timeElapsed / entSpeed;
-      // bounce scale
       if (p < 0.58) {
           scaleEnt = 0.52 + (1.08 - 0.52) * (p / 0.58);
       } else {
@@ -373,12 +373,13 @@ export const draw3DRing = (ctx: CanvasRenderingContext2D, x: number, y: number, 
   }
 
   const tiltRad = (tiltDegrees * Math.PI) / 180;
-  const scaleY = Math.max(0.1, Math.cos(tiltRad)); 
-  
-  const innerRadius = radius * 0.56; 
-  const depth = radius * 0.18;
-  const baseStrokeWidth = strokeWidth * 1.5;
+  const scaleY = Math.max(0.1, Math.cos(tiltRad));
 
+  // Inner radius at 43% matching CSS mask radial-gradient(farthest-side, transparent 0 43%, #000 44% 100%)
+  const innerRadius = radius * 0.43;
+  const depth = radius * 0.18;
+
+  // Color ramp matching CSS vars
   const cColor = color;
   const cDeep = shiftColor(color, -24);
   const cDark = shiftColor(color, -48);
@@ -392,70 +393,110 @@ export const draw3DRing = (ctx: CanvasRenderingContext2D, x: number, y: number, 
 
   ctx.save();
   ctx.translate(x, y);
-  ctx.scale(scaleEnt, scaleEnt * scaleY); 
+  ctx.scale(scaleEnt, scaleEnt * scaleY);
   ctx.globalAlpha = alphaEnt * (isGhost ? 0.7 : 1.0);
-  
-  // 1. Ground Shadow (contact shadow)
+
+  // 1. Contact Shadow (CSS .contact-shadow)
   if (!isGhost) {
       ctx.save();
       ctx.beginPath();
-      ctx.scale(1, 0.4); 
-      const shadowDepth = depth * 2.5; 
+      ctx.scale(1, 0.4);
+      const shadowDepth = depth * 2.5;
       ctx.translate(0, shadowDepth / scaleY);
       const sGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.1);
-      sGrad.addColorStop(0, 'rgba(0,0,0,0.6)');
-      sGrad.addColorStop(0.44, 'rgba(0,0,0,0.25)');
+      sGrad.addColorStop(0, 'rgba(0,0,0,0.54)');
+      sGrad.addColorStop(0.44, 'rgba(0,0,0,0.22)');
       sGrad.addColorStop(0.72, 'transparent');
       ctx.fillStyle = sGrad;
       ctx.arc(0, 0, radius * 1.1, 0, Math.PI * 2);
       ctx.fill();
+      ctx.filter = 'none';
       ctx.restore();
   }
 
-  // 2. Inner Hole Wall (visible on top half: PI to 2PI)
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(0, 0, innerRadius, Math.PI, 0); 
-  ctx.lineTo(innerRadius, depth);
-  ctx.arc(0, depth, innerRadius, 0, Math.PI, true); 
-  ctx.closePath();
-  const innerGrad = ctx.createLinearGradient(-innerRadius, 0, innerRadius, 0);
-  innerGrad.addColorStop(0, cColor);
-  innerGrad.addColorStop(0.5, cDeep);
-  innerGrad.addColorStop(1, cDark);
-  ctx.fillStyle = innerGrad;
-  ctx.fill();
-  ctx.restore();
+  // 2. Body Layers (CSS .body-layer x3 stacked for 3D depth extrusion)
+  const drawBodyLayer = (offsetX: number, offsetY: number, offsetZ: number, scl: number, opacity: number, brightness: number, saturation: number) => {
+      ctx.save();
+      ctx.globalAlpha = alphaEnt * opacity * (isGhost ? 0.7 : 1.0);
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scl, scl);
 
-  // 3. Outer Body Wall (visible on bottom half: 0 to PI)
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(0, 0, radius, 0, Math.PI); 
-  ctx.lineTo(-radius, depth);
-  ctx.arc(0, depth, radius, Math.PI, 0, true); 
-  ctx.closePath();
-  const outerGrad = ctx.createLinearGradient(-radius, 0, radius, 0);
-  outerGrad.addColorStop(0, fadeHex(cLight, 0.7));
-  outerGrad.addColorStop(0.2, cColor);
-  outerGrad.addColorStop(0.5, cDeep);
-  outerGrad.addColorStop(0.8, cDark);
-  outerGrad.addColorStop(1, fadeHex(cDark, 0.78));
-  ctx.fillStyle = outerGrad;
-  ctx.fill();
-  ctx.restore();
+      // Annulus clip
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.arc(0, 0, innerRadius, Math.PI * 2, 0, true);
+      ctx.closePath();
+      ctx.clip('evenodd');
 
-  // 4. Top Face - Annulus
+      // Highlight dot (radial-gradient at 35% 18%)
+      const hGrad = ctx.createRadialGradient(radius * 0.35, -radius * 0.18, 0, radius * 0.35, -radius * 0.18, radius * 0.23);
+      hGrad.addColorStop(0, 'rgba(255,255,255,0.24)');
+      hGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = hGrad;
+      ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+
+      // Conic gradient body
+      try {
+          const grad = ctx.createConicGradient(-28 * Math.PI / 180, 0, 0);
+          grad.addColorStop(0, fadeHex(cLight, 0.7));
+          grad.addColorStop(34/360, cColor);
+          grad.addColorStop(106/360, cDeep);
+          grad.addColorStop(188/360, cDark);
+          grad.addColorStop(246/360, fadeHex(cDark, 0.78));
+          grad.addColorStop(318/360, cDeep);
+          grad.addColorStop(1, fadeHex(cLight, 0.6));
+          ctx.fillStyle = grad;
+      } catch(e) {
+          ctx.fillStyle = cColor;
+      }
+      ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+
+      // Box shadow: inset 0 5px 7px rgba(255,255,255,0.16), inset 0 -9px 15px rgba(0,0,0,0.5)
+      // Top inner glow
+      const topInG = ctx.createLinearGradient(0, -radius, 0, -radius + radius * 0.15);
+      topInG.addColorStop(0, 'rgba(255,255,255,0.16)');
+      topInG.addColorStop(1, 'transparent');
+      ctx.fillStyle = topInG;
+      ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+      // Bottom inner shadow
+      const botInG = ctx.createLinearGradient(0, radius, 0, radius - radius * 0.25);
+      botInG.addColorStop(0, `rgba(0,0,0,${0.5 * brightness})`);
+      botInG.addColorStop(1, 'transparent');
+      ctx.fillStyle = botInG;
+      ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+
+      // Brightness/saturation adjustment via overlay
+      if (brightness < 1) {
+          ctx.globalCompositeOperation = 'multiply';
+          ctx.fillStyle = `rgba(${Math.round(255*brightness)},${Math.round(255*brightness)},${Math.round(255*brightness)},1)`;
+          ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+          ctx.globalCompositeOperation = 'source-over';
+      }
+
+      ctx.restore();
+  };
+
+  // body-layer-3: deepest, most faded
+  drawBodyLayer(6, 12, -12, 0.99, 0.52, 0.72, 0.95);
+  // body-layer-2
+  drawBodyLayer(4, 8, -8, 0.994, 0.7, 0.88, 1);
+  // body-layer-1
+  drawBodyLayer(2, 4, -4, 0.998, 0.88, 1, 1.08);
+
+  // 3. Fill - Top Face Annulus (CSS .fill with spinning conic gradient)
   ctx.save();
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
-  ctx.arc(0, 0, innerRadius, Math.PI * 2, 0, true); 
+  ctx.arc(0, 0, innerRadius, Math.PI * 2, 0, true);
   ctx.closePath();
   ctx.clip('evenodd');
-  
+
+  // Spinning conic gradient (from -22deg, matching CSS animation)
   try {
-      const spinOffset = (now % 2350) / 2350;
+      const spinSpeed = 2350;
+      const spinOffset = (now % spinSpeed) / spinSpeed;
       const startAngle = (spinOffset * Math.PI * 2) - (22 * Math.PI / 180);
-      
+
       const grad = ctx.createConicGradient(startAngle, 0, 0);
       grad.addColorStop(0, cHot);
       grad.addColorStop(22/360, cLight);
@@ -472,61 +513,151 @@ export const draw3DRing = (ctx: CanvasRenderingContext2D, x: number, y: number, 
       ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
   }
 
-  // fill::before highlight rim (screen)
-  ctx.globalCompositeOperation = 'screen';
-  ctx.strokeStyle = 'rgba(255,255,255,0.24)';
-  ctx.lineWidth = Math.max(1, radius * 0.1);
-  ctx.beginPath();
-  ctx.arc(0, 0, radius - (radius * 0.05), 0, Math.PI*2);
-  ctx.stroke();
-
-  // Highlight dot (radial-gradient)
+  // Highlight dot (radial-gradient circle at 34% 22%) - CSS .fill radial-gradient
   const hw = radius * 0.34;
-  const hy = -radius * 0.28;
+  const hy = -radius * 0.22;
   const hGrad = ctx.createRadialGradient(hw, hy, 0, hw, hy, radius * 0.6);
-  hGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
-  hGrad.addColorStop(0.17, 'rgba(255,255,255,0.2)');
+  hGrad.addColorStop(0, 'rgba(255,255,255,0.92)');
+  hGrad.addColorStop(0.06, 'rgba(255,255,255,0.92)');
+  hGrad.addColorStop(0.17, 'rgba(255,255,255,0.22)');
   hGrad.addColorStop(0.31, 'transparent');
   ctx.fillStyle = hGrad;
   ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
 
+  // fill::before - highlight rim border (screen blend)
+  ctx.globalCompositeOperation = 'screen';
+  ctx.beginPath();
+  ctx.arc(0, 0, radius - radius * 0.05, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.24)';
+  ctx.lineWidth = Math.max(1, radius * 0.08);
+  ctx.stroke();
+
+  // fill::after - specular streak conic (conic-gradient from 18deg)
+  try {
+      const sGrad = ctx.createConicGradient(18 * Math.PI / 180, 0, 0);
+      sGrad.addColorStop(34/360, 'transparent');
+      sGrad.addColorStop(48/360, 'rgba(255,255,255,0.76)');
+      sGrad.addColorStop(74/360, 'transparent');
+      sGrad.addColorStop(180/360, 'transparent');
+      sGrad.addColorStop(216/360, 'rgba(255,255,255,0.28)');
+      sGrad.addColorStop(250/360, 'transparent');
+      sGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = sGrad;
+      ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+  } catch(e) {}
+
   ctx.globalCompositeOperation = 'source-over';
-  
-  // Inner shadow (hole) 
-  const holeGrad = ctx.createRadialGradient(0, 0, innerRadius - 8, 0, 0, innerRadius);
+
+  // Box shadow: inset 0 8px 12px rgba(255,255,255,0.34), inset 0 -13px 18px rgba(0,0,0,0.38)
+  const topGlow = ctx.createLinearGradient(0, -radius, 0, -radius + radius * 0.2);
+  topGlow.addColorStop(0, 'rgba(255,255,255,0.34)');
+  topGlow.addColorStop(1, 'transparent');
+  ctx.fillStyle = topGlow;
+  ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+
+  const botShadow = ctx.createLinearGradient(0, radius, 0, radius - radius * 0.3);
+  botShadow.addColorStop(0, 'rgba(0,0,0,0.38)');
+  botShadow.addColorStop(1, 'transparent');
+  ctx.fillStyle = botShadow;
+  ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+
+  // Inner shadow (hole inset)
+  const holeGrad = ctx.createRadialGradient(0, 0, innerRadius * 0.7, 0, 0, innerRadius);
   holeGrad.addColorStop(0, 'transparent');
   holeGrad.addColorStop(1, 'rgba(0,0,0,0.5)');
   ctx.fillStyle = holeGrad;
   ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
-  
+
   // Outer shadow (border inset)
-  const outerSGrad = ctx.createRadialGradient(0, 0, radius - 15, 0, 0, radius);
+  const outerSGrad = ctx.createRadialGradient(0, 0, radius * 0.8, 0, 0, radius);
   outerSGrad.addColorStop(0, 'transparent');
   outerSGrad.addColorStop(1, 'rgba(0,0,0,0.3)');
   ctx.fillStyle = outerSGrad;
   ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+
   ctx.restore(); // remove clip
 
-  // 5. Specular streaks
+  // 4. Hole (CSS .hole) - inner circle covering the center
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(0, 0, innerRadius, 0, Math.PI * 2);
+  // Inner shadows: inset 0 9px 16px rgba(0,0,0,0.48), inset 0 -4px 10px rgba(255,255,255,0.08)
+  const holeInner = ctx.createRadialGradient(0, -innerRadius * 0.3, innerRadius * 0.2, 0, 0, innerRadius);
+  holeInner.addColorStop(0, 'rgba(0,0,0,0.48)');
+  holeInner.addColorStop(0.6, 'rgba(0,0,0,0.15)');
+  holeInner.addColorStop(1, 'rgba(0,0,0,0.08)');
+  ctx.fillStyle = holeInner;
+  ctx.fill();
+
+  // Hole border: 0 0 0 2px rgba(255,255,255,0.22), 0 0 0 7px rgba(0,0,0,0.12)
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Outer ring shadow
+  ctx.beginPath();
+  ctx.arc(0, 0, innerRadius + 5, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+
+  // Bottom inner light reflection
+  const holeBot = ctx.createLinearGradient(0, innerRadius, 0, innerRadius - innerRadius * 0.35);
+  holeBot.addColorStop(0, 'rgba(255,255,255,0.08)');
+  holeBot.addColorStop(1, 'transparent');
+  ctx.beginPath();
+  ctx.arc(0, 0, innerRadius, 0, Math.PI * 2);
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = holeBot;
+  ctx.fillRect(-innerRadius, -innerRadius, innerRadius * 2, innerRadius * 2);
+  ctx.restore();
+
+  ctx.restore();
+
+  // 5. Glass overlay (CSS .glass - soft-light blend)
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(0, 0, radius - 2, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.globalCompositeOperation = 'soft-light';
+  const glassGrad = ctx.createLinearGradient(-radius, -radius, radius * 0.28, radius * 0.62);
+  glassGrad.addColorStop(0, 'rgba(255,255,255,0.45)');
+  glassGrad.addColorStop(0.28, 'transparent');
+  glassGrad.addColorStop(0.62, 'transparent');
+  glassGrad.addColorStop(1, 'rgba(0,0,0,0.24)');
+  ctx.fillStyle = glassGrad;
+  ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+  // Glass inset border
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.beginPath();
+  ctx.arc(0, 0, radius - 1, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  // 6. Specular streak (CSS .specular-streak orbiting animation)
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
   const orbitTime = 1180;
   const orbitOffset = (now % orbitTime) / orbitTime;
-  
+
   let specOpacity = 0;
   if (orbitOffset < 0.07) specOpacity = orbitOffset / 0.07;
   else if (orbitOffset < 0.58) specOpacity = 1 - 0.1 * ((orbitOffset - 0.07) / 0.51);
   else if (orbitOffset < 0.72) specOpacity = 0.9 - 0.9 * ((orbitOffset - 0.58) / 0.14);
-  
+
   if (specOpacity > 0) {
       ctx.globalAlpha = specOpacity * alphaEnt;
       ctx.rotate(orbitOffset * Math.PI * 2);
-      
+
+      // Clip to annulus
       ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.arc(0, 0, radius + 5, 0, Math.PI * 2);
       ctx.arc(0, 0, innerRadius, Math.PI * 2, 0, true);
       ctx.clip('evenodd');
-      
+
+      // specular-streak::before - conic gradient masked to ring band
       try {
           const sGrad = ctx.createConicGradient(-14 * Math.PI / 180, 0, 0);
           sGrad.addColorStop(18/360, 'transparent');
@@ -534,11 +665,12 @@ export const draw3DRing = (ctx: CanvasRenderingContext2D, x: number, y: number, 
           sGrad.addColorStop(32/360, 'rgba(255,255,255,0.92)');
           sGrad.addColorStop(40/360, 'rgba(255,255,255,0.72)');
           sGrad.addColorStop(55/360, 'transparent');
+          sGrad.addColorStop(1, 'transparent');
           ctx.fillStyle = sGrad;
           ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
-      } catch (e) {}
+      } catch(e) {}
 
-      // Bright dot at top
+      // specular-streak::after - bright dot at top
       ctx.beginPath();
       const dotG = ctx.createRadialGradient(0, -radius + 12, 0, 0, -radius + 12, 12);
       dotG.addColorStop(0, 'rgba(255,255,255,0.98)');
@@ -549,32 +681,45 @@ export const draw3DRing = (ctx: CanvasRenderingContext2D, x: number, y: number, 
       ctx.translate(0, -radius + 12);
       ctx.rotate(-10 * Math.PI / 180);
       ctx.scale(2, 0.7);
-      ctx.arc(0, 0, 12, 0, Math.PI*2);
+      ctx.arc(0, 0, 12, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+
+      // Drop shadow glow (CSS filter:drop-shadow)
+      if (!isGhost) {
+          ctx.shadowColor = 'rgba(255,255,255,0.72)';
+          ctx.shadowBlur = 8;
+      }
   }
   ctx.restore();
 
-  // 6. Stroked borders (Clean Vector Outlines)
+  // 7. Stroke outline (CSS .stroke) - final glow and border
   ctx.save();
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
-  ctx.moveTo(innerRadius, 0);
-  ctx.arc(0, 0, innerRadius, Math.PI * 2, 0, true);
-  
+  // box-shadow: 0 0 0 1px rgba(255,255,255,0.36) inset, 0 0 0 3px rgba(0,0,0,0.12) inset, 0 0 18px color 34%, 0 0 3px rgba(255,255,255,0.7)
   if (!isGhost) {
-      ctx.shadowColor = 'rgba(0,0,0,0.4)';
-      ctx.shadowBlur = 6;
+      ctx.shadowColor = fadeHex(cColor, 0.34);
+      ctx.shadowBlur = 18;
   }
-  
-  ctx.strokeStyle = fadeHex(cLight, 0.6);
-  ctx.lineWidth = Math.max(1.5, baseStrokeWidth * 0.7);
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = Math.max(1, strokeWidth);
   ctx.stroke();
 
+  // Inset white border
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
   ctx.beginPath();
-  ctx.arc(0, depth, radius, 0, Math.PI);
-  ctx.strokeStyle = fadeHex(cDark, 0.8);
-  ctx.lineWidth = Math.max(1, baseStrokeWidth * 0.5);
+  ctx.arc(0, 0, radius - 1, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.36)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Inset dark border
+  ctx.beginPath();
+  ctx.arc(0, 0, radius - 2.5, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 3;
   ctx.stroke();
 
   ctx.restore();
