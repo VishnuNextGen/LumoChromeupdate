@@ -69,6 +69,7 @@ import { EventPlaybar } from './src/components/EventPlaybar';
 
 const App = () => {
   const [user, setUser] = useState<any>(null);
+  const [isGuest, setIsGuest] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [view, setView] = useState<'home' | 'workspace'>('home');
   const [projects, setProjects] = useState<Project[]>([]);
@@ -109,6 +110,12 @@ const App = () => {
       return () => unsubscribe();
   }, []);
 
+  const loginAsGuest = () => {
+      setIsGuest(true);
+      setUser({ uid: 'guest-' + Date.now(), displayName: 'Guest', email: null, photoURL: null, isGuest: true });
+      setAuthLoading(false);
+  };
+
   const createProject = async (file: File) => {
       if (!user) {
           setErrorMessage("Please sign in to create projects.");
@@ -136,8 +143,8 @@ const App = () => {
           }
       };
       
-      // Save to Firebase
-      await createProjectDoc({ ...newProject, ownerId: user.uid });
+      // Save to Firebase (skip for guest)
+      if (!isGuest) await createProjectDoc({ ...newProject, ownerId: user.uid });
       
       setProjects(prev => [newProject, ...prev]);
       setProjectBlobs(prev => new Map(prev).set(newId, url));
@@ -147,7 +154,7 @@ const App = () => {
 
   const deleteProjectAction = async (id: string) => {
       if (window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-          await deleteProjectDoc(id);
+          if (!isGuest) await deleteProjectDoc(id);
           setProjects(prev => prev.filter(p => p.id !== id));
           setProjectBlobs(prev => {
               const newMap = new Map(prev);
@@ -169,7 +176,7 @@ const App = () => {
           const p = projects.find(x => x.id === editingProjectId);
           if (p) {
               const updatedProject = { ...p, name: editForm.name, description: editForm.description, lastModified: Date.now() };
-              await updateProjectDoc(updatedProject);
+              if (!isGuest) await updateProjectDoc(updatedProject);
               setProjects(prev => prev.map(x => x.id === editingProjectId ? updatedProject : x));
           }
           setEditingProjectId(null);
@@ -184,7 +191,7 @@ const App = () => {
           setActiveProject(prev => prev && prev.id === id ? updatedProject : prev);
           
           // Fire and forget Firebase update so it doesn't block UI thread on slow networks
-          updateProjectDoc(updatedProject).catch(console.error);
+          if (!isGuest) updateProjectDoc(updatedProject).catch(console.error);
       }
   };
 
@@ -268,7 +275,7 @@ const App = () => {
   }
 
   if (!user) {
-      return <LoginScreen onLogin={loginWithGoogle} />;
+      return <LoginScreen onLogin={loginWithGoogle} onGuest={loginAsGuest} />;
   }
 
   // --- Home Screen ---
@@ -303,7 +310,7 @@ const App = () => {
                              <User className="w-5 h-5 text-gray-400" />
                          )}
                          <span className="text-sm font-medium text-gray-300">{user.displayName || user.email}</span>
-                         <button onClick={logout} className="ml-2 text-gray-500 hover:text-red-400 transition-colors" title="Log Out">
+                         <button onClick={() => { if (isGuest) { setUser(null); setIsGuest(false); setProjects([]); setView('home'); } else logout(); }} className="ml-2 text-gray-500 hover:text-red-400 transition-colors" title="Log Out">
                              <LogOut className="w-4 h-4" />
                          </button>
                      </div>
